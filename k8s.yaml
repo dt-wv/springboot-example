@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: springboot-example
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: springboot-example
+type: kubernetes.io/basic-auth
+stringData:
+  password: password
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-initdb-config
+  namespace: springboot-example
+data:
+  init.sql: |
+    USE mysql;
+    GRANT ALL ON *.* TO 'root'@'localhost';
+    FLUSH PRIVILEGES;
+    use TianMiao;
+    CREATE TABLE IF NOT EXISTS `user` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `username` VARCHAR(45) NOT NULL, 
+    `createdAt` DATETIME NULL,
+    `update_at` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE INDEX `id_UNIQUE` (`id` ASC) VISIBLE,
+    UNIQUE INDEX `username_UNIQUE` (`username` ASC) VISIBLE);
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deployment
+  namespace: springboot-example
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8 
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        - name: MYSQL_DATABASE
+          value: TianMiao
+        ports:
+        - containerPort: 3306
+          name: service
+        volumeMounts:
+          - name: mysql-initdb
+            mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: mysql-initdb
+        configMap:
+          name: mysql-initdb-config     
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: springboot-example
+  labels:
+    app: mysql
+spec:
+  ports:
+  - port: 3306
+    targetPort: 3306
+    name: service
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tomcat-deployment
+  namespace: springboot-example
+  labels:
+    app: tomcat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tomcat
+  template:
+    metadata:
+      labels:
+        app: tomcat
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
+    spec:
+      containers:
+      - name: tomcat
+        image: dtwver/springboot-tomcat:v1
+        env:
+        - name: JAVA_OPTS
+          value: -javaagent:/opentelemetry-javaagent.jar
+        - name: DB_PORT_3306_TCP_ADDR
+          value: mysql                 
+        - name: DB_ENV_MYSQL_DATABASE
+          value: TianMiao
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.observability-backend.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: tomcat-springboot-java
+        ports:
+        - containerPort: 8080
+          name: service
+        - containerPort: 9464
+          name: service1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tomcat-service
+  namespace: springboot-example
+  labels:
+    app: tomcat
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: service
+  - port: 9464
+    targetPort: 9464
+    name: service1
+  selector:
+    app: tomcat
