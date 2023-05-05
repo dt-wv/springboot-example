@@ -102,23 +102,15 @@ spec:
     metadata:
       labels:
         app: tomcat
-      annotations:
-        instrumentation.opentelemetry.io/inject-java: "true"
     spec:
       containers:
       - name: tomcat
         image: dtwver/springboot-tomcat:v1
         env:
-        - name: JAVA_OPTS
-          value: -javaagent:/opentelemetry-javaagent.jar
         - name: DB_PORT_3306_TCP_ADDR
           value: mysql                 
         - name: DB_ENV_MYSQL_DATABASE
           value: TianMiao
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: http://otel-collector.observability-backend.svc.cluster.local:4317
-        - name: OTEL_SERVICE_NAME
-          value: tomcat-springboot-java
         ports:
         - containerPort: 8080
           name: service
